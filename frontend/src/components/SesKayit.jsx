@@ -5,7 +5,7 @@
 
 import React, { useState, useRef } from 'react';
 import AnalizSonucu from './AnalizSonucu';
-import { mockAnalizYap } from '../mockData';
+import ApiService from '../services/apiService';
 
 const SesKayit = () => {
   const [kayitAktif, setKayitAktif] = useState(false);
@@ -13,6 +13,7 @@ const SesKayit = () => {
   const [hataVar, setHataVar] = useState('');
   const [analizYapiliyor, setAnalizYapiliyor] = useState(false);
   const [analizSonucu, setAnalizSonucu] = useState(null);
+  const [kayitBaslangici, setKayitBaslangici] = useState(null);
   const sesAlgilimaRef = useRef(null);
 
   // Web Speech API desteği kontrolu
@@ -41,8 +42,9 @@ const SesKayit = () => {
       setKayitAktif(true);
       setHataVar('');
       setMetinCiktisi('');
-      setAnalizSonucu(null); // Önceki sonucu temizle
-      console.log('Ses kaydi basladi...');
+      setAnalizSonucu(null);
+      setKayitBaslangici(Date.now()); // Zaman kaydet
+      console.log('🎤 Ses kaydi basladi...');
     };
 
     // Sonuc alindığında
@@ -84,7 +86,7 @@ const SesKayit = () => {
     }
   };
 
-  // Metni analiz et (Mock API)
+  // Metni analiz et (Gerçek API)
   const metniAnalazEt = async () => {
     if (!metinCiktisi.trim()) {
       setHataVar('Analiz için metin gerekli');
@@ -95,11 +97,27 @@ const SesKayit = () => {
     setHataVar('');
 
     try {
-      const sonuc = await mockAnalizYap(metinCiktisi.trim());
-      setAnalizSonucu(sonuc);
+      // Konuşma süresini hesapla
+      const konusmaSuresi = kayitBaslangici ? 
+        Math.round((Date.now() - kayitBaslangici) / 1000) : 0;
+
+      console.log(`⏱️ Konuşma süresi: ${konusmaSuresi} saniye`);
+
+      // Gerçek API çağrısı
+      const result = await ApiService.analyzeTranscript(metinCiktisi.trim(), konusmaSuresi);
+      
+      if (result.success) {
+        console.log('✅ Gerçek AI analizi alındı');
+        setAnalizSonucu(result.data);
+      } else {
+        console.log('⚠️ API hatası - Fallback kullanılıyor');
+        setAnalizSonucu(result.data);
+        setHataVar('Backend bağlantısı kurulamadı - Yerel analiz gösteriliyor');
+      }
+
     } catch (error) {
-      setHataVar('Analiz sırasında hata oluştu');
-      console.error('Analiz hatasi:', error);
+      setHataVar('Analiz sırasında hata oluştu: ' + error.message);
+      console.error('❌ Analiz hatasi:', error);
     } finally {
       setAnalizYapiliyor(false);
     }
@@ -111,6 +129,7 @@ const SesKayit = () => {
     setAnalizSonucu(null);
     setHataVar('');
     setAnalizYapiliyor(false);
+    setKayitBaslangici(null);
   };
 
   // Eğer analiz sonucu varsa, onu göster
